@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package com.crm.proto.common;
+
+option java_package = "com.crm.proto.common";
+option java_multiple_files = true;
+
+// Chuẩn hoá response trả về từ gRPC
+message BaseResponse {
+  int32 code = 1;
+  string message = 2;
+  bool success = 3;
+}
+
+// Định dạng ngày tháng chuẩn
+message DateFilter {
+  string start_date = 1; // ISO 8601
+  string end_date = 2;
+}
+
+message Pagination {
+  int32 page = 1;
+  int32 size = 2;
+  string sort_by = 3;
+}

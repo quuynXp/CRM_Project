@@ -1,0 +1,74 @@
+server:
+  port: ${SERVER_PORT:8080}
+  tomcat:
+    connection-timeout: 20000
+    max-threads: 200
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: ${spring.application.name}
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME:crmuser}
+    password: ${SPRING_DATASOURCE_PASSWORD:12345678}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 30000
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:redis}
+      port: 6379
+      password: ${SPRING_REDIS_PASSWORD:redisPass123}
+      timeout: 2000
+
+  servlet:
+    multipart:
+      max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:10MB}
+      max-request-size: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE:10MB}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    try-it-out-enabled: true
+
+# Custom Configuration Mapped from .env
+app:
+  jwt:
+    secret: ${JWT_SECRET:HelloworldIamLinguamonkeyTechLeadAndThisIsSecrectKeyForJWTTokenGeneration}
+    expiration: 86400000 # 1 day
+  google:
+    client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
+    client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}
+  cors:
+    allowed-origins: "*"
+
+# Logging
+logging:
+  level:
+    root: INFO # Root level là INFO để thấy log khởi chạy của Spring
+    org.springframework: WARN # Chỉ hiện cảnh báo/lỗi từ Framework
+    org.hibernate: WARN # Chỉ hiện lỗi từ Hibernate, tắt log SQL
+    org.hibernate.SQL: ERROR # Tắt hoàn toàn log query SQL
+    org.hibernate.type.descriptor.sql.BasicBinder: ERROR # Tắt log tham số truyền vào query
+    com.google.auth: WARN
+    com.crm.auth: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

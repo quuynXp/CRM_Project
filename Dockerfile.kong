@@ -1,0 +1,9 @@
+FROM kong:3.4
+
+# Copy the declarative config file into the image
+COPY kong.yml /etc/kong/kong.yml
+
+# Switch to root to ensure permissions if needed (optional, Kong usually runs as kong user)
+USER root
+RUN chmod 644 /etc/kong/kong.yml
+USER kong

@@ -1,0 +1,91 @@
+server:
+  port: ${PORT:8084}
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 10
+  shutdown: graceful
+
+spring:
+  application:
+    name: notification-service
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+      database: 0
+
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+  quartz:
+    job-store-type: memory
+    properties:
+      org:
+        quartz:
+          threadPool:
+            threadCount: 10
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    try-it-out-enabled: true
+
+twilio:
+  account-sid: ${TWILIO_ACCOUNT_SID}
+  auth-token: ${TWILIO_AUTH_TOKEN}
+  from-phone-number: ${TWILIO_FROM_PHONE_NUMBER}
+  verify-service-sid: ${TWILIO_VERIFY_SERVICE_SID}
+
+firebase:
+  config-path: /app/config/service-account-key.json
+
+grpc:
+  server:
+    port: ${GRPC_PORT:9094}
+
+# Logging
+logging:
+  level:
+    root: INFO # Root level là INFO để thấy log khởi chạy của Spring
+    org.springframework: WARN # Chỉ hiện cảnh báo/lỗi từ Framework
+    org.hibernate: WARN # Chỉ hiện lỗi từ Hibernate, tắt log SQL
+    org.hibernate.SQL: ERROR # Tắt hoàn toàn log query SQL
+    org.hibernate.type.descriptor.sql.BasicBinder: ERROR # Tắt log tham số truyền vào query
+    com.google.auth: WARN
+    com.crm.auth: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

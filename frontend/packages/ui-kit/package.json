@@ -1,0 +1,9 @@
+{
+  "name": "@crm/ui-kit",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

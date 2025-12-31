@@ -1,0 +1,11 @@
+{
+  "name": "@crm/auth-module",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "peerDependencies": {
+    "react": "*"
+  },
+  "dependencies": {
+    "@crm/network-client": "*"
+  }
+}

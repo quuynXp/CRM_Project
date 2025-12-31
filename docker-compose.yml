@@ -1,0 +1,235 @@
+version: '3.8'
+
+networks:
+  lingua-net:
+    driver: bridge
+
+volumes:
+  app_data:
+  redis_data:
+  huggingface_cache:
+
+services:
+  # ==============================================================================
+  # INFRASTRUCTURE
+  # ==============================================================================
+  app-database:
+    image: postgres:17
+    container_name: app-database
+    environment:
+      POSTGRES_USER: crmuser
+      POSTGRES_DB: crm_db
+      POSTGRES_PASSWORD: 12345678
+      TZ: "Asia/Ho_Chi_Minh"
+    volumes:
+      - app_data:/var/lib/postgresql/data
+      - ./infrastructure/database/init:/docker-entrypoint-initdb.d
+    networks:
+      - lingua-net
+    restart: always
+
+  redis:
+    image: redis:6-alpine
+    container_name: redis
+    command: ["redis-server", "--requirepass", "redisPass123"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - lingua-net
+    restart: always
+
+  # ==============================================================================
+  # BACKEND: AUTH SERVICE
+  # ==============================================================================
+  auth-service:
+    build:
+      context: backend/identity-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    depends_on:
+      - app-database
+      - redis
+    env_file:
+      - backend/identity-service/.env
+    networks:
+      - lingua-net
+    restart: always
+
+  # ==============================================================================
+  # BACKEND: CUSTOMER SERVICE
+  # ==============================================================================
+  customer-service:
+    build:
+      context: ./backend/customer-service
+      dockerfile: Dockerfile
+    container_name: customer-service
+    depends_on:
+      - app-database
+    env_file:
+      - ./backend/customer-service/.env
+    volumes:
+      - ./infrastructure/secrets/gdrive-key.json:/app/config/gdrive-key.json:ro
+    networks:
+      - lingua-net
+    restart: always
+
+  # ==============================================================================
+  # BACKEND: FILE SERVICE
+  # ==============================================================================
+  file-service:
+    build:
+      context: ./backend/file-service
+      dockerfile: Dockerfile
+    container_name: file-service
+    depends_on:
+      - app-database
+    env_file:
+      - ./backend/file-service/.env
+    networks:
+      - lingua-net
+    restart: always
+
+  # ==============================================================================
+  # BACKEND: SALES SERVICE
+  # ==============================================================================
+  sales-service:
+    build:
+      context: ./backend/sales-service
+      dockerfile: Dockerfile
+    container_name: sales-service
+    depends_on:
+      - app-database
+    env_file:
+      - ./backend/sales-service/.env
+    networks:
+      - lingua-net
+    restart: always
+
+  # ==============================================================================
+  # BACKEND: NOTIFICATION SERVICE
+  # ==============================================================================
+  notification-service:
+    build:
+      context: ./backend/notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    depends_on:
+      - redis
+    env_file:
+      - ./backend/notification-service/.env
+    volumes:
+      - ./infrastructure/secrets/service-account-key.json:/app/config/service-account-key.json:ro
+    networks:
+      - lingua-net
+    restart: always
+
+  # ==============================================================================
+  # BACKEND: AI SERVICE
+  # ==============================================================================
+  ai-service:
+    build:
+      context: ./backend/ai-service
+      dockerfile: Dockerfile
+    container_name: ai-service
+    depends_on:
+      - app-database
+      - redis
+    env_file:
+      - ./backend/ai-service/.env
+    volumes:
+      - ./backend/ai-service:/app
+      - ./infrastructure/secrets/public_key.pem:/app/public_key.pem:ro
+      - huggingface_cache:/app/hf_cache
+    networks:
+      - lingua-net
+    restart: always
+
+  ai-worker:
+    build:
+      context: ./backend/ai-service
+      dockerfile: Dockerfile
+    container_name: ai-worker
+    depends_on:
+      - redis
+      - app-database
+      - ai-service
+    env_file:
+      - ./backend/ai-service/.env
+    volumes:
+      - ./backend/ai-service:/app
+      - ./backend/ai-service/entrypoint.sh:/app/entrypoint.sh
+      - ./backend/ai-service/wait_for_db.py:/app/wait_for_db.py
+      - huggingface_cache:/app/hf_cache
+    entrypoint: ["/bin/bash", "/app/entrypoint.sh"]
+    command: ["celery", "-A", "src.worker.tasks.celery_app", "worker", "--loglevel=info", "--concurrency=4"]
+    networks:
+      - lingua-net
+    restart: always
+
+  ai-scheduler:
+    build:
+      context: ./backend/ai-service
+      dockerfile: Dockerfile
+    container_name: ai-scheduler
+    depends_on:
+      - redis
+      - app-database
+    env_file:
+      - ./backend/ai-service/.env
+    volumes:
+      - ./backend/ai-service:/app
+    command: ["celery", "-A", "src.worker.tasks.celery_app", "beat", "--loglevel=info"]
+    networks:
+      - lingua-net
+    restart: always
+
+  # ==============================================================================
+  # GATEWAY
+  # ==============================================================================
+  api-gateway:
+    image: kong:3.4
+    container_name: api-gateway
+    depends_on:
+      - auth-service
+      - customer-service
+      - sales-service
+      - notification-service
+      - ai-service
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: "/etc/kong/kong.yml"
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_PLUGINS: bundled,rate-limiting,cors,request-transformer,proxy-cache
+    ports:
+      - "80:8000"
+      - "127.0.0.1:8001:8001"
+    volumes:
+      - ./infrastructure/gateway/kong.yml:/etc/kong/kong.yml:ro
+    networks:
+      - lingua-net
+    restart: always
+
+  # ==============================================================================
+  # BACKUP SERVICE
+  # ==============================================================================
+  backup-service:
+    build:
+      context: ./backend/backup-service
+      dockerfile: Dockerfile
+    container_name: backup-service
+    depends_on:
+      - app-database
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+      - POSTGRES_HOST=app-database
+      - POSTGRES_DB=crm_db
+      - POSTGRES_USER=crmuser
+      - POSTGRES_PASSWORD=12345678
+      - GOOGLE_SERVICE_ACCOUNT_FILE=/app/config/service-account-key.json
+      - GOOGLE_FOLDER_ID=1BrqsnQ5vF38phPAT-8XexbsNgIzVQXOe
+    volumes:
+      - ./infrastructure/secrets/service-account-key.json:/app/config/service-account-key.json:ro
+    networks:
+      - lingua-net
+    restart: always

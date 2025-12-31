@@ -1,0 +1,146 @@
+name: CRM Mobile - Signed APK Build (Flat Monorepo)
+
+on:
+  push:
+    paths:
+      - "frontend/**"
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend  # Đứng ngay tại thư mục frontend chứa App.js
+
+    steps:
+      - name: 🧱 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🗑️ MAXIMUM DISK CLEANUP
+        run: |
+          echo "🔥 Cleaning up disk space..."
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /usr/local/lib/android/sdk/ndk
+          sudo docker image prune --all --force
+          sudo rm -rf /usr/local/lib/android/sdk/system-images
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+          echo "✅ Disk space cleaned."
+          df -h
+
+      - name: 🧩 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'yarn'
+          cache-dependency-path: ./frontend/yarn.lock
+
+      - name: 📦 Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: 💣 Delete existing Android folder
+        run: rm -rf android
+
+      - name: 🛠️ Generate Android directory (Prebuild)
+        run: npx expo prebuild --platform android --no-install
+
+      - name: 🩹 Patch react-native-worklets
+        run: |
+          echo "🔧 Patching react-native-worklets..."
+          if [ -f "node_modules/react-native-worklets/android/CMakeLists.txt" ]; then
+            sed -i 's/ReactAndroid::jsctooling//g' node_modules/react-native-worklets/android/CMakeLists.txt
+            echo "✅ Patched."
+          else
+            echo "⚠️ Warning: CMakeLists.txt not found."
+          fi
+
+      - name: 🚀 Configure Gradle Memory & Workers
+        run: |
+          echo -e "\norg.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=512m -Dkotlin.daemon.jvm.options=\"-Xmx1024m\"" >> ./android/gradle.properties
+          echo "org.gradle.workers.max=1" >> ./android/gradle.properties
+          echo "android.enableR8=true" >> ./android/gradle.properties
+
+      - name: ☕ Setup Java (JDK)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          
+      - name: 🐘 Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-flat-v1-${{ hashFiles('frontend/android/**/*.gradle*', 'frontend/android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-flat-v1-
+
+      - name: 🔐 Setup Keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > ./android/app/my-release-key.keystore
+
+      - name: ⚙️ Build APK with Gradle
+        env:
+          ORG_GRADLE_PROJECT_MYAPP_UPLOAD_STORE_FILE: my-release-key.keystore
+          ORG_GRADLE_PROJECT_MYAPP_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_MYAPP_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_MYAPP_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          cd android
+          chmod +x gradlew
+          
+          echo "🔨 Starting Build (Root App Context)..."
+          
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file=$(pwd)/app/my-release-key.keystore \
+            -Pandroid.injected.signing.store.password=${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.ANDROID_KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: 📤 Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-signed-apk
+          path: frontend/android/app/build/outputs/apk/release/app-release.apk
+
+      - name: 🧹 Final Clean Up
+        if: always()
+        run: rm -f ./android/app/my-release-key.keystore
+  build-web:
+    name: 🌐 Build Web (Static Site)
+    runs-on: ubuntu-latest
+    needs: []
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: 🧱 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🧩 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'yarn'
+          cache-dependency-path: ./frontend/yarn.lock
+
+      - name: 📦 Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: 🌐 Build for Web
+        env:
+          EXPO_PUBLIC_API_URL: "https://api.your-crm.com" # Ví dụ biến môi trường public
+        run: |
+          npx expo export --platform web
+
+      - name: 📤 Upload Web Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build-dist
+          path: frontend/dist

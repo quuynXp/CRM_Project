@@ -1,0 +1,54 @@
+server:
+  port: ${PORT:8085}
+  tomcat:
+    max-http-form-post-size: 100MB
+
+spring:
+  application:
+    name: file-service
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+cloudinary:
+  cloud_name: ${CLOUDINARY_CLOUD_NAME}
+  api_key: ${CLOUDINARY_API_KEY}
+  api_secret: ${CLOUDINARY_API_SECRET}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    try-it-out-enabled: true
+
+# Logging
+logging:
+  level:
+    root: INFO # Root level là INFO để thấy log khởi chạy của Spring
+    org.springframework: WARN # Chỉ hiện cảnh báo/lỗi từ Framework
+    org.hibernate: WARN # Chỉ hiện lỗi từ Hibernate, tắt log SQL
+    org.hibernate.SQL: ERROR # Tắt hoàn toàn log query SQL
+    org.hibernate.type.descriptor.sql.BasicBinder: ERROR # Tắt log tham số truyền vào query
+    com.google.auth: WARN
+    com.crm.auth: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
