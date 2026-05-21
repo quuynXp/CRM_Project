@@ -1,0 +1,171 @@
+version: '3.8'
+
+networks:
+  crm-net:
+    driver: bridge
+
+volumes:
+  pg_data:
+  redis_data:
+  es_data:
+  kafka_data:
+  zookeeper_data:
+  prom_data:
+  grafana_data:
+  keycloak_data:
+
+services:
+  # ==========================================
+  # 1. DATABASE & CACHING
+  # ==========================================
+  postgres:
+    image: postgres:17
+    container_name: crm-postgres
+    environment:
+      POSTGRES_USER: crmuser
+      POSTGRES_PASSWORD: crmpassword
+      POSTGRES_DB: crm_db
+      TZ: "Asia/Ho_Chi_Minh"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - crm-net
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: crm-redis
+    command: redis-server --requirepass redisPass123
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - crm-net
+    restart: unless-stopped
+
+  # ==========================================
+  # 2. EVENT STREAMING (KAFKA)
+  # ==========================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: crm-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+    networks:
+      - crm-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: crm-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - crm-net
+
+  # ==========================================
+  # 3. SEARCH ENGINE (ELASTICSEARCH)
+  # ==========================================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    container_name: crm-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - crm-net
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.1
+    container_name: crm-kibana
+    depends_on:
+      - elasticsearch
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    networks:
+      - crm-net
+
+  # ==========================================
+  # 4. IDENTITY & ACCESS MANAGEMENT (KEYCLOAK)
+  # ==========================================
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0.1
+    container_name: crm-keycloak
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/crm_db
+      KC_DB_USERNAME: crmuser
+      KC_DB_PASSWORD: crmpassword
+      KC_DB_SCHEMA: public
+    command: start-dev
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - crm-net
+
+  # ==========================================
+  # 5. OBSERVABILITY (PROMETHEUS, GRAFANA, JAEGER)
+  # ==========================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: crm-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - prom_data:/prometheus
+    # Note: Requires a prometheus.yml file locally to mount
+    networks:
+      - crm-net
+
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: crm-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - crm-net
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.51
+    container_name: crm-jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686" # UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    networks:
+      - crm-net

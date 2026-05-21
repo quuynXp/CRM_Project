@@ -1,4 +1,4 @@
-package com.crm.auth.entity;
+package com.crm.identity.entity;
 
 import com.crm.auth.entity.base.BaseEntity;
 

@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple, Set, Any, Generic, TypeVar
 from contextlib import asynccontextmanager
+from src.api.automation_router import router as automation_router
 
 import uvicorn
 from fastapi import (
@@ -54,7 +55,6 @@ if GOOGLE_API_KEY:
 
 AI_BOT_ID = uuid.UUID('00000000-0000-0000-0000-000000000000')
 
-# Used only for direct translation endpoint, separate from Chat AI tiers
 TRANSLATION_MODEL_TIERS = [
     {"name": "gemini-2.5-flash", "purpose": "Flash - Balanced"},
     {"name": "gemini-2.5-flash-lite", "purpose": "Lite - Cost Effective"},
@@ -832,6 +832,7 @@ async def signaling_endpoint(websocket: WebSocket, token: str = Query(...), room
         logger.error(f"Signal Error: {e}")
         signal_manager.disconnect(websocket, normalized_room_id)
 
+app.include_router(automation_router)
 app.include_router(internal_router)
 app.include_router(protected_router)
 
